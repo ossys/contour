@@ -183,10 +183,10 @@ func UpgradeHTTPS() *envoy_api_v2_route.Route_Redirect {
 }
 
 // HeaderValueList creates a list of Envoy HeaderValueOptions from the provided map.
-func HeaderValueList(hvm map[string]string, app bool) []*envoy_api_v2_core.HeaderValueOption {
+func HeaderValueList(headersToAdd map[string]string, headersToModify map[string]string, app bool) []*envoy_api_v2_core.HeaderValueOption {
 	var hvs []*envoy_api_v2_core.HeaderValueOption
 
-	for key, value := range hvm {
+	for key, value := range headersToAdd {
 		hvs = append(hvs, &envoy_api_v2_core.HeaderValueOption{
 			Header: &envoy_api_v2_core.HeaderValue{
 				Key:   key,
