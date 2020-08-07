@@ -5117,11 +5117,10 @@ func TestDAGInsert(t *testing.T) {
 					Port: 80,
 					VirtualHosts: virtualhosts(
 						virtualhost("example.com",
-							routeHeaders("/", map[string]string{
-								"In-Foo": "bar",
-							}, []string{"In-Baz"}, map[string]string{
-								"Out-Foo": "bar",
-							}, []string{"Out-Baz"}, service(s1)),
+							routeHeaders("/",
+								map[string]string{ "In-Foo": "bar", }, []string{"In-Baz"},
+								map[string]string{}, map[string]string{ "Out-Foo": "bar", },
+								[]string{"Out-Baz"}, map[string]string{}, service(s1)),
 						),
 					),
 				},
@@ -5366,6 +5365,7 @@ func TestDAGInsert(t *testing.T) {
 							}},
 							RequestHeadersPolicy: &HeadersPolicy{
 								HostRewrite: "bar.com",
+								Modify: map[string]string{},
 							},
 						}),
 					),
@@ -5394,6 +5394,7 @@ func TestDAGInsert(t *testing.T) {
 							}},
 							RequestHeadersPolicy: &HeadersPolicy{
 								HostRewrite: "bar.com",
+								Modify: map[string]string{},
 							},
 						}),
 					),
@@ -5415,6 +5416,7 @@ func TestDAGInsert(t *testing.T) {
 								Upstream: service(s9),
 								RequestHeadersPolicy: &HeadersPolicy{
 									HostRewrite: "bar.com",
+									Modify: map[string]string{},
 								},
 								SNI: "bar.com",
 							}},
@@ -5443,6 +5445,7 @@ func TestDAGInsert(t *testing.T) {
 								},
 								RequestHeadersPolicy: &HeadersPolicy{
 									HostRewrite: "bar.com",
+									Modify: map[string]string{},
 								},
 								SNI: "bar.com",
 							}},
@@ -5486,6 +5489,7 @@ func TestDAGInsert(t *testing.T) {
 									"X-Header": "bar.com",
 									"Y-Header": "zed.com",
 								},
+								Modify: map[string]string{},
 							},
 						}),
 					),
@@ -5508,6 +5512,7 @@ func TestDAGInsert(t *testing.T) {
 								Set: map[string]string{
 									"X-Header": "bar.com",
 								},
+								Modify: map[string]string{},
 							},
 						}),
 					),
@@ -5530,6 +5535,7 @@ func TestDAGInsert(t *testing.T) {
 								Set: map[string]string{
 									"X-Header": "",
 								},
+								Modify: map[string]string{},
 							},
 						}),
 					),
@@ -6572,6 +6578,7 @@ func TestValidateHeaderAlteration(t *testing.T) {
 				"K-Baz": "blah",
 			},
 			Remove: []string{"K-Nada"},
+			Modify: map[string]string{},
 		},
 	}, {
 		name: "duplicate set",
@@ -6635,6 +6642,7 @@ func TestValidateHeaderAlteration(t *testing.T) {
 				"K-Baz":           "%%DOWNSTREAM_LOCAL_ADDRESS%%",
 				"Lot-Of-Percents": "%%%%%%%%%%",
 			},
+			Modify: map[string]string{},
 		},
 	}}
 
@@ -6704,15 +6712,19 @@ func routeWebsocket(prefix string, first *Service, rest ...*Service) *Route {
 	return r
 }
 
-func routeHeaders(prefix string, requestSet map[string]string, requestRemove []string, responseSet map[string]string, responseRemove []string, first *Service, rest ...*Service) *Route {
+func routeHeaders(prefix string, requestSet map[string]string, requestRemove []string,
+	requestModify map[string]string, responseSet map[string]string, responseRemove []string,
+	responseModify map[string]string, first *Service, rest ...*Service) *Route {
 	r := prefixroute(prefix, first, rest...)
 	r.RequestHeadersPolicy = &HeadersPolicy{
 		Set:    requestSet,
 		Remove: requestRemove,
+		Modify: requestModify,
 	}
 	r.ResponseHeadersPolicy = &HeadersPolicy{
 		Set:    responseSet,
 		Remove: responseRemove,
+		Modify: responseModify,
 	}
 	return r
 }

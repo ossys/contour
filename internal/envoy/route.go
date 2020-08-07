@@ -198,6 +198,18 @@ func HeaderValueList(headersToAdd map[string]string, headersToModify map[string]
 		})
 	}
 
+	for key, value := range headersToModify {
+		hvs = append(hvs, &envoy_api_v2_core.HeaderValueOption{
+			Header: &envoy_api_v2_core.HeaderValue{
+				Key:   key,
+				Value: value,
+			},
+			Append: &wrappers.BoolValue{
+				Value: app,
+			},
+		})
+	}
+
 	sort.Slice(hvs, func(i, j int) bool {
 		return hvs[i].Header.Key < hvs[j].Header.Key
 	})
@@ -246,11 +258,11 @@ func weightedClusters(clusters []*dag.Cluster) *envoy_api_v2_route.WeightedClust
 			Weight: protobuf.UInt32(cluster.Weight),
 		}
 		if cluster.RequestHeadersPolicy != nil {
-			c.RequestHeadersToAdd = HeaderValueList(cluster.RequestHeadersPolicy.Set, false)
+			c.RequestHeadersToAdd = HeaderValueList(cluster.RequestHeadersPolicy.Set, cluster.RequestHeadersPolicy.Modify, false)
 			c.RequestHeadersToRemove = cluster.RequestHeadersPolicy.Remove
 		}
 		if cluster.ResponseHeadersPolicy != nil {
-			c.ResponseHeadersToAdd = HeaderValueList(cluster.ResponseHeadersPolicy.Set, false)
+			c.ResponseHeadersToAdd = HeaderValueList(cluster.ResponseHeadersPolicy.Set, cluster.RequestHeadersPolicy.Modify, false)
 			c.ResponseHeadersToRemove = cluster.ResponseHeadersPolicy.Remove
 		}
 		wc.Clusters = append(wc.Clusters, c)
