@@ -194,6 +194,15 @@ type HeaderValue struct {
 	Value string
 }
 
+type ModifyHeader struct {
+
+	Header string
+
+	Regex string
+
+	Value string
+}
+
 // PeerValidationContext defines how to validate the certificate on the upstream service.
 type PeerValidationContext struct {
 	// CACertificate holds a reference to the Secret containing the CA to be used to

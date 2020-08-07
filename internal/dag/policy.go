@@ -16,6 +16,7 @@ package dag
 import (
 	"fmt"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 
@@ -111,21 +112,30 @@ func headersPolicy(policy *projcontour.HeadersPolicy, allowHostRewrite bool) (*H
 
 	modify := make(map[string]string, len(policy.Modify))
 	for _, entry := range policy.Modify {
-		key := http.CanonicalHeaderKey(entry.Name)
-		if _, ok := set[key]; ok {
-			return nil, fmt.Errorf("duplicate header addition: %q", key)
+
+		if msgs := validation.IsHTTPHeaderName(entry.Header); len(msgs) != 0 {
+			return nil, fmt.Errorf("invalid modify header %q: %v", entry.Header, msgs)
+		}
+
+		key := http.CanonicalHeaderKey(entry.Header) // key == Location
+
+		if _, ok := modify[key]; ok {
+			return nil, fmt.Errorf("duplicate header modification: %q", key)
 		}
 		if key == "Host" {
 			if !allowHostRewrite {
 				return nil, fmt.Errorf("rewriting %q header is not supported", key)
 			}
-			hostRewrite = entry.Value
-			continue
 		}
-		if msgs := validation.IsHTTPHeaderName(key); len(msgs) != 0 {
-			return nil, fmt.Errorf("invalid set header %q: %v", key, msgs)
+
+		_, err := regexp.Compile(entry.Regex)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex provided: %q", entry.Regex)
 		}
-		modify[key] = escapeHeaderValue(entry.Value)
+
+		modify["header"] = key
+		modify["regex"] = entry.Regex
+		modify["value"] = entry.Value
 	}
 
 	return &HeadersPolicy{
