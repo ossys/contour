@@ -428,6 +428,10 @@ type HeadersPolicy struct {
 	// Remove specifies a list of HTTP header names to remove.
 	// +optional
 	Remove []string `json:"remove,omitempty"`
+	// Replace specifies a list of HTTP header values that will be modified.
+	// If the header does not exist it will be added, otherwise it will be overwritten with the new value.
+	// +optional
+	Modify []ModifyHeader `json:"modify,omitempty"`
 }
 
 // HeaderValue represents a header name/value pair
@@ -439,6 +443,19 @@ type HeaderValue struct {
 	// Value represents the value of a header specified by a key
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
+	Value string `json:"value"`
+}
+
+// HeaderValue represents a header name/value pair
+type ModifyHeader struct {
+	// Name represents a key of a header
+	// +optional
+	Header string `json:"header"`
+	// Value represents the value of a header specified by a key
+	// +optional
+	Regex string `json:"regex"`
+	// Value represents the value of a header specified by a key
+	// +optional
 	Value string `json:"value"`
 }
 

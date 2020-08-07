@@ -109,10 +109,30 @@ func headersPolicy(policy *projcontour.HeadersPolicy, allowHostRewrite bool) (*H
 		rl = nil
 	}
 
+	modify := make(map[string]string, len(policy.Modify))
+	for _, entry := range policy.Modify {
+		key := http.CanonicalHeaderKey(entry.Name)
+		if _, ok := set[key]; ok {
+			return nil, fmt.Errorf("duplicate header addition: %q", key)
+		}
+		if key == "Host" {
+			if !allowHostRewrite {
+				return nil, fmt.Errorf("rewriting %q header is not supported", key)
+			}
+			hostRewrite = entry.Value
+			continue
+		}
+		if msgs := validation.IsHTTPHeaderName(key); len(msgs) != 0 {
+			return nil, fmt.Errorf("invalid set header %q: %v", key, msgs)
+		}
+		modify[key] = escapeHeaderValue(entry.Value)
+	}
+
 	return &HeadersPolicy{
 		Set:         set,
 		HostRewrite: hostRewrite,
 		Remove:      rl,
+		Modify:     modify,
 	}, nil
 }
 
