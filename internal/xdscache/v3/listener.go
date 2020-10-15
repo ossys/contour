@@ -465,6 +465,8 @@ func (v *listenerVisitor) visit(vertex dag.Vertex) {
 			cm := envoy_v3.HTTPConnectionManagerBuilder().
 				Codec(envoy_v3.CodecForVersions(v.DefaultHTTPVersions...)).
 				AddFilter(envoy_v3.FilterMisdirectedRequests(vh.VirtualHost.Name)).
+				AddFilter(envoy_v3.RewriteLocationHeader()).
+				AddFilter(envoy_v3.SameSiteHeader()).
 				DefaultFilters().
 				AddFilter(authFilter).
 				RouteConfigName(path.Join("https", vh.VirtualHost.Name)).
@@ -482,7 +484,6 @@ func (v *listenerVisitor) visit(vertex dag.Vertex) {
 				Get()
 
 			filters = envoy_v3.Filters(cm)
-
 			alpnProtos = envoy_v3.ProtoNamesForVersions(v.DefaultHTTPVersions...)
 		} else {
 			filters = envoy_v3.Filters(
