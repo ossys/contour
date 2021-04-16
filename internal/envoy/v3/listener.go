@@ -680,3 +680,85 @@ func ContainsFallbackFilterChain(filterchains []*envoy_listener_v3.FilterChain) 
 	}
 	return false
 }
+
+func RewriteLocationHeader() *http.HttpFilter {
+	// When Envoy matches on the virtual host domain, we configure
+	// it to match any port specifier (see envoy.VirtualHost),
+	// so the Host header (authority) may contain a port that
+	// should be ignored. This means that if we don't have a match,
+	// we should try again after stripping the port specifier.
+
+	code := `
+   function envoy_on_response(response_handle)
+  response_handle:logInfo("response headers:")
+  local headers = response_handle:headers()
+  local locationHeader = headers:get("location")
+  if locationHeader ~= nil then
+    modified = string.gsub(locationHeader, "http://", "https://")
+    response_handle:headers():replace("location", modified)
+  end
+  for key, value in pairs(headers) do
+    response_handle:logInfo("key: " .. key .. ", value: " .. value)
+  end
+   end
+ `
+
+	return &http.HttpFilter{
+		Name: "envoy.filters.http.lua",
+		ConfigType: &http.HttpFilter_TypedConfig{
+			TypedConfig: protobuf.MustMarshalAny(&lua.Lua{
+				InlineCode: code,
+			}),
+		},
+	}
+}
+
+//  function envoy_on_response(response_handle)
+//    function set_cookie_header(rh)
+//      s = rh:headers():get("Set-Cookie")
+//      if not string.find(s, "SameSite") then
+// s = s.."; SameSite=None; Secure"
+//      end
+//      return s
+//    end
+//
+//    if response_handle:headers():get("Set-Cookie") then
+//      secure_cookie_header = set_cookie_header(response_handle)
+//      response_handle:headers():replace("Set-Cookie",secure_cookie_header)
+//    end
+//   end
+
+//////////
+
+//  function envoy_on_response(response_handle)
+//    for name, value, never_index in response_handle:headers():each() do
+//      if string.find(name:lower(), "set-cookie") then
+//	if not string.find(value:lower(), "samesite") then
+//	  value = value.."; SameSite=None; Secure"
+//	end
+//      end
+//    end
+//   end
+
+func SameSiteHeader() *http.HttpFilter {
+	code := `
+function envoy_on_response(response_handle)
+  for name, value, never_index in response_handle:headers():each() do
+    if string.find(name:lower(), "set-cookie") then
+      if not string.find(value:lower(), "samesite") then
+	value = value.."; SameSite=None; Secure"
+      end
+    end
+  end
+end
+ `
+
+	return &http.HttpFilter{
+		Name: "envoy.filters.http.lua",
+		ConfigType: &http.HttpFilter_TypedConfig{
+			TypedConfig: protobuf.MustMarshalAny(&lua.Lua{
+				InlineCode: code,
+			}),
+		},
+	}
+}
