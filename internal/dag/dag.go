@@ -301,6 +301,7 @@ type HeadersPolicy struct {
 
 	Set    map[string]string
 	Remove []string
+	Modify map[string]string
 }
 
 // RateLimitPolicy holds rate limiting parameters.
@@ -390,6 +391,12 @@ type HeaderValue struct {
 	Key string
 	// Value represents the value of a header specified by a key
 	Value string
+}
+
+type ModifyHeader struct {
+	Header string
+	Regex  string
+	Value  string
 }
 
 // PeerValidationContext defines how to validate the certificate on the upstream service.
