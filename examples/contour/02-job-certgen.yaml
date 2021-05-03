@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
       - name: contour
-        image: docker.io/projectcontour/contour:v1.15.0
+        image: docker.io/ossys/contour:v1.15.0
         imagePullPolicy: Always
         command:
         - contour
