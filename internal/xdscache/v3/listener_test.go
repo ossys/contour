@@ -142,6 +142,8 @@ func TestListenerVisit(t *testing.T) {
 		return envoy_v3.HTTPConnectionManagerBuilder().
 			AddFilter(envoy_v3.FilterMisdirectedRequests(vhost)).
 			DefaultFilters().
+			AddFilter(envoy_v3.RewriteLocationHeader()).
+			AddFilter(envoy_v3.SameSiteHeader()).
 			MetricsPrefix(ENVOY_HTTPS_LISTENER).
 			RouteConfigName(path.Join("https", vhost)).
 			AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -150,6 +152,8 @@ func TestListenerVisit(t *testing.T) {
 
 	fallbackCertFilter := envoy_v3.HTTPConnectionManagerBuilder().
 		DefaultFilters().
+		AddFilter(envoy_v3.RewriteLocationHeader()).
+		AddFilter(envoy_v3.SameSiteHeader()).
 		MetricsPrefix(ENVOY_HTTPS_LISTENER).
 		RouteConfigName(ENVOY_FALLBACK_ROUTECONFIG).
 		AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1206,6 +1210,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1320,6 +1326,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1434,6 +1442,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1548,6 +1558,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1662,6 +1674,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -1776,6 +1790,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -2408,6 +2424,8 @@ func TestListenerVisit(t *testing.T) {
 						MetricsPrefix(ENVOY_HTTP_LISTENER).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						ConnectionShutdownGracePeriod(timeout.DurationSetting(90 * time.Second)).
 						Get(),
 				),
@@ -2484,6 +2502,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -2674,6 +2694,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -2756,6 +2778,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -2838,6 +2862,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -2920,6 +2946,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -3105,6 +3133,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).
@@ -3250,6 +3280,8 @@ func TestListenerVisit(t *testing.T) {
 					Filters: envoy_v3.Filters(envoy_v3.HTTPConnectionManagerBuilder().
 						AddFilter(envoy_v3.FilterMisdirectedRequests("www.example.com")).
 						DefaultFilters().
+						AddFilter(envoy_v3.RewriteLocationHeader()).
+						AddFilter(envoy_v3.SameSiteHeader()).
 						MetricsPrefix(ENVOY_HTTPS_LISTENER).
 						RouteConfigName(path.Join("https", "www.example.com")).
 						AccessLoggers(envoy_v3.FileAccessLogEnvoy(DEFAULT_HTTP_ACCESS_LOG)).

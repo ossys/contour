@@ -156,11 +156,11 @@ func (v *routeVisitor) onVirtualHost(vh *dag.VirtualHost) {
 			Action: envoy_v3.RouteRoute(route),
 		}
 		if route.RequestHeadersPolicy != nil {
-			rt.RequestHeadersToAdd = append(envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Set, false), envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Add, true)...)
+			rt.RequestHeadersToAdd = append(envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Set, nil, false), envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Add, nil, true)...)
 			rt.RequestHeadersToRemove = route.RequestHeadersPolicy.Remove
 		}
 		if route.ResponseHeadersPolicy != nil {
-			rt.ResponseHeadersToAdd = envoy_v3.HeaderValueList(route.ResponseHeadersPolicy.Set, false)
+			rt.ResponseHeadersToAdd = envoy_v3.HeaderValueList(route.ResponseHeadersPolicy.Set, route.RequestHeadersPolicy.Modify, false)
 			rt.ResponseHeadersToRemove = route.ResponseHeadersPolicy.Remove
 		}
 		if route.RateLimitPolicy != nil && route.RateLimitPolicy.Local != nil {
@@ -206,11 +206,11 @@ func (v *routeVisitor) onSecureVirtualHost(svh *dag.SecureVirtualHost) {
 		}
 
 		if route.RequestHeadersPolicy != nil {
-			rt.RequestHeadersToAdd = append(envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Set, false), envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Add, true)...)
+			rt.RequestHeadersToAdd = append(envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Set, nil, false), envoy_v3.HeaderValueList(route.RequestHeadersPolicy.Add, nil, true)...)
 			rt.RequestHeadersToRemove = route.RequestHeadersPolicy.Remove
 		}
 		if route.ResponseHeadersPolicy != nil {
-			rt.ResponseHeadersToAdd = envoy_v3.HeaderValueList(route.ResponseHeadersPolicy.Set, false)
+			rt.ResponseHeadersToAdd = envoy_v3.HeaderValueList(route.ResponseHeadersPolicy.Set, route.RequestHeadersPolicy.Modify, false)
 			rt.ResponseHeadersToRemove = route.ResponseHeadersPolicy.Remove
 		}
 		if route.RateLimitPolicy != nil && route.RateLimitPolicy.Local != nil {

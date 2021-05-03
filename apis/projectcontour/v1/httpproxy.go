@@ -765,6 +765,8 @@ type HeadersPolicy struct {
 	// Remove specifies a list of HTTP header names to remove.
 	// +optional
 	Remove []string `json:"remove,omitempty"`
+
+	Modify []ModifyHeader `json:"modify,omitempty"`
 }
 
 // HeaderValue represents a header name/value pair
@@ -777,6 +779,12 @@ type HeaderValue struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
 	Value string `json:"value"`
+}
+
+type ModifyHeader struct {
+	Header string `json:"header"`
+	Regex  string `json:"regex"`
+	Value  string `json:"value"`
 }
 
 // UpstreamValidation defines how to verify the backend service's certificate

@@ -176,17 +176,53 @@ func headersPolicyRoute(policy *contour_api_v1.HeadersPolicy, allowHostRewrite b
 	}
 	rl := remove.List()
 
+	modify := make(map[string]string, len(policy.Modify))
+	for _, entry := range policy.Modify {
+		if msgs := validation.IsHTTPHeaderName(entry.Header); len(msgs) != 0 {
+			return nil, fmt.Errorf("invalid modify header %q: %v", entry.Header, msgs)
+		}
+
+		key := http.CanonicalHeaderKey(entry.Header)
+		if _, ok := modify[key]; ok {
+			return nil, fmt.Errorf("duplicate header modification: %q", key)
+		}
+		if key == "Host" {
+			if !allowHostRewrite {
+				return nil, fmt.Errorf("rewriting %q header is not supported", key)
+			}
+			hostRewrite = entry.Value
+			continue
+		}
+
+		if msgs := validation.IsHTTPHeaderName(key); len(msgs) != 0 {
+			return nil, fmt.Errorf("invalid set header %q: %v", key, msgs)
+		}
+
+		_, err := regexp.Compile(entry.Regex)
+		if err != nil {
+			return nil, fmt.Errorf("invalid regex provided: %q", entry.Regex)
+		}
+
+		modify["header"] = key
+		modify["regex"] = entry.Regex
+		modify["value"] = entry.Value
+	}
+
 	if len(set) == 0 {
 		set = nil
 	}
 	if len(rl) == 0 {
 		rl = nil
 	}
+	if len(modify) == 0 {
+		modify = nil
+	}
 
 	return &HeadersPolicy{
 		Set:         set,
 		HostRewrite: hostRewrite,
 		Remove:      rl,
+		Modify:      modify,
 	}, nil
 }
 

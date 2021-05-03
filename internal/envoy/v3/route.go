@@ -235,10 +235,10 @@ func UpgradeHTTPS() *envoy_route_v3.Route_Redirect {
 }
 
 // HeaderValueList creates a list of Envoy HeaderValueOptions from the provided map.
-func HeaderValueList(hvm map[string]string, app bool) []*envoy_core_v3.HeaderValueOption {
+func HeaderValueList(headersToAdd map[string]string, headersToModify map[string]string, app bool) []*envoy_core_v3.HeaderValueOption {
 	var hvs []*envoy_core_v3.HeaderValueOption
 
-	for key, value := range hvm {
+	for key, value := range headersToAdd {
 		hvs = append(hvs, &envoy_core_v3.HeaderValueOption{
 			Header: &envoy_core_v3.HeaderValue{
 				Key:   key,
@@ -249,6 +249,18 @@ func HeaderValueList(hvm map[string]string, app bool) []*envoy_core_v3.HeaderVal
 			},
 		})
 	}
+
+	// for key, value := range headersToModify {
+	// 	hvs = append(hvs, &envoy_core_v3.HeaderValueOption{
+	// 		Header: &envoy_core_v3.HeaderValue{
+	// 			Key:   key,
+	// 			Value: value,
+	// 		},
+	// 		Append: &wrappers.BoolValue{
+	// 			Value: app,
+	// 		},
+	// 	})
+	// }
 
 	sort.Slice(hvs, func(i, j int) bool {
 		return hvs[i].Header.Key < hvs[j].Header.Key
@@ -269,11 +281,11 @@ func weightedClusters(clusters []*dag.Cluster) *envoy_route_v3.WeightedCluster {
 			Weight: protobuf.UInt32(cluster.Weight),
 		}
 		if cluster.RequestHeadersPolicy != nil {
-			c.RequestHeadersToAdd = append(HeaderValueList(cluster.RequestHeadersPolicy.Set, false), HeaderValueList(cluster.RequestHeadersPolicy.Add, true)...)
+			c.RequestHeadersToAdd = append(HeaderValueList(cluster.RequestHeadersPolicy.Set, nil, false), HeaderValueList(cluster.RequestHeadersPolicy.Add, nil, true)...)
 			c.RequestHeadersToRemove = cluster.RequestHeadersPolicy.Remove
 		}
 		if cluster.ResponseHeadersPolicy != nil {
-			c.ResponseHeadersToAdd = HeaderValueList(cluster.ResponseHeadersPolicy.Set, false)
+			c.ResponseHeadersToAdd = HeaderValueList(cluster.ResponseHeadersPolicy.Set, cluster.RequestHeadersPolicy.Modify, false)
 			c.ResponseHeadersToRemove = cluster.ResponseHeadersPolicy.Remove
 		}
 		wc.Clusters = append(wc.Clusters, c)
