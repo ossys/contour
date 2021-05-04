@@ -47,7 +47,7 @@ spec:
     spec:
       containers:
       - name: contour
-        image: docker.io/ossys/contour:v1.15.0
+        image: docker.io/ossys/contour:1.15.0
         imagePullPolicy: Always
         command:
         - contour
@@ -62,6 +62,8 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+      imagePullSecrets:
+        - name: regcred
       restartPolicy: Never
       serviceAccountName: contour-certgen
       securityContext:
