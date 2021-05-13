@@ -485,8 +485,8 @@ func (v *listenerVisitor) visit(vertex dag.Vertex) {
 				AddFilter(envoy_v3.FilterMisdirectedRequests(vh.VirtualHost.Name)).
 				DefaultFilters().
 				AddFilter(authFilter).
-				AddFilter(envoy_v3.RewriteLocationHeader()).
 				AddFilter(envoy_v3.SameSiteHeader()).
+				AddFilter(envoy_v3.RewriteLocationHeader()).
 				RouteConfigName(path.Join("https", vh.VirtualHost.Name)).
 				MetricsPrefix(vh.ListenerName).
 				AccessLoggers(v.ListenerConfig.newSecureAccessLog()).
