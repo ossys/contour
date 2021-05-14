@@ -761,63 +761,60 @@ end
 // header api: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/lua_filter#config-http-filters-lua-header-wrapper
 func SameSiteHeader() *http.HttpFilter {
 	code := `
+
+function concatStrings(strings)
+  local t = {}
+  for _, value in ipairs(strings) do
+    t[#t+1] = value
+  end
+  return table.concat(t, "")
+end
+
 function envoy_on_request(request_handle)
-  request_handle:logInfo("[req] start")
+  local begin_timestamp = os.time()
+  request_handle:logInfo("[req] start at " .. begin_timestamp)
+
   local headers = request_handle:headers()
   local cookies = {}
 
   for key, value in pairs(headers) do
-    request_handle:logInfo("[req] header key: " .. key)
     if key:lower() == "set-cookie" then
       cookies[#cookies + 1] = value
     end
   end
 
   request_handle:streamInfo():dynamicMetadata():set("envoy.filters.http.lua", "cookies", cookies)
-  request_handle:logInfo("[req] done")
+
+  local end_timestamp = os.time()
+  request_handle:logInfo("[req] end at " .. end_timestamp)
 end
 
 function envoy_on_response(response_handle)
-  response_handle:logInfo("[resp] start")
+  -- to reduce string copying
+  local strings = {}
+
   local metadata = response_handle:streamInfo():dynamicMetadata()
-
-  for dyn_key, dyn_val in pairs(metadata) do
-    response_handle:logInfo("[resp] dyn key: " .. dyn_key)
-    for k, v in pairs(dyn_val) do
-      response_handle:logInfo("[resp] dyn_val-k: " .. k)
-    end
-  end
-
-  for dyn_key, dyn_val in pairs(metadata:get("envoy.filters.http.lua")) do
-    response_handle:logInfo("[resp] :get(envoy.filters.http.lua) -> key: " .. dyn_key)
-    for k, v in pairs(dyn_val) do
-      response_handle:logInfo("[resp] get cookies val-k: " .. k)
-    end
-  end
-
   local cookies = metadata:get("envoy.filters.http.lua")["cookies"]
-  response_handle:logInfo("[resp] cookies len: " .. #cookies)
 
   for _, cookie in pairs(cookies) do
-    response_handle:logInfo("[resp] cookie: ", cookie)
+    local loweredCookie = cookie:lower()
+    local modifiedCookie = cookie
 
-    local modifiedCookie = string.gsub(cookie, "SameSite=Lax", "SameSite=None")
-    if not string.find(modifiedCookie:lower(), "samesite") then
-      response_handle:logInfo("[resp] appending samesite attribute to set-cookie header")
-      modifiedCookie = modifiedCookie.."; SameSite=None; Secure"
+    if string.find(loweredCookie, "samesite") then
+      modifiedCookie = string.gsub(cookie, "SameSite=Lax", "SameSite=None")
+    else
+      strings = {modifiedCookie, "; SameSite=None; Secure"}
+      modifiedCookie = concatStrings(strings)
     end
-    if not string.find(modifiedCookie:lower(), "secure") then
-      modifiedCookie = modifiedCookie.."; Secure"
+
+    if not string.find(modifiedCookie, "Secure") then
+      strings = {modifiedCookie, "; Secure"}
+      modifiedCookie = concatStrings(strings)
     end
 
-    response_handle:logInfo("[resp] adding modifiedCookie: ", modifiedCookie)
-    response_handle:headers():add("set-cookie", modifiedCookie)
+    -- response_handle:headers():add("set-cookie", modifiedCookie)
+    response_handle:headers():add("set-cookie", cookie)
   end
-
-  for key, value in pairs(response_handle:headers()) do
-    response_handle:logInfo("[resp] key: " .. key .. ", val: " .. value)
-  end
-  response_handle:logInfo("[resp] done")
 end
  `
 
