@@ -690,25 +690,21 @@ func ContainsFallbackFilterChain(filterchains []*envoy_listener_v3.FilterChain) 
 }
 
 func RewriteLocationHeader() *http.HttpFilter {
-	// When Envoy matches on the virtual host domain, we configure
-	// it to match any port specifier (see envoy.VirtualHost),
-	// so the Host header (authority) may contain a port that
-	// should be ignored. This means that if we don't have a match,
-	// we should try again after stripping the port specifier.
-
 	code := `
-   function envoy_on_response(response_handle)
+function envoy_on_response(response_handle)
   response_handle:logInfo("response headers:")
   local headers = response_handle:headers()
   local locationHeader = headers:get("location")
+
   if locationHeader ~= nil then
     modified = string.gsub(locationHeader, "http://", "https://")
     response_handle:headers():replace("location", modified)
   end
+
   for key, value in pairs(headers) do
     response_handle:logInfo("key: " .. key .. ", value: " .. value)
   end
-   end
+end
  `
 
 	return &http.HttpFilter{
@@ -748,15 +744,76 @@ func RewriteLocationHeader() *http.HttpFilter {
 //    end
 //   end
 
+//  for key, value in pairs(headers) do
+//    response_handle:logInfo("key: " .. key .. ", value: " .. value)
+//    if string.find(key:lower(), "set-cookie") then
+//      if not string.find(value:lower(), "samesite") then
+//	response_handle:logInfo("appending samesite attribute to set-cookie header")
+//	value = value.."; SameSite=None; Secure"
+//      else
+//	response_handle:logInfo("gsubbing SameSite=Lax -> SameSite=None")
+//	value = string.gsub(value, "SameSite=Lax;", "SameSite=None;")
+//      end
+//    end
+//  end
+
+// lua examples: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/lua_filter#config-http-filters-lua
+// header api: https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_filters/lua_filter#config-http-filters-lua-header-wrapper
 func SameSiteHeader() *http.HttpFilter {
 	code := `
-function envoy_on_response(response_handle)
-  for name, value, never_index in response_handle:headers():each() do
-    if string.find(name:lower(), "set-cookie") then
-      if not string.find(value:lower(), "samesite") then
-	value = value.."; SameSite=None; Secure"
-      end
+
+function concatStrings(strings)
+  local t = {}
+  for _, value in ipairs(strings) do
+    t[#t+1] = value
+  end
+  return table.concat(t, "")
+end
+
+function envoy_on_request(request_handle)
+  local begin_timestamp = os.time()
+  request_handle:logInfo("[req] start at " .. begin_timestamp)
+
+  local headers = request_handle:headers()
+  local cookies = {}
+
+  for key, value in pairs(headers) do
+    if key:lower() == "set-cookie" then
+      cookies[#cookies + 1] = value
     end
+  end
+
+  request_handle:streamInfo():dynamicMetadata():set("envoy.filters.http.lua", "cookies", cookies)
+
+  local end_timestamp = os.time()
+  request_handle:logInfo("[req] end at " .. end_timestamp)
+end
+
+function envoy_on_response(response_handle)
+  -- to reduce string copying
+  local strings = {}
+
+  local metadata = response_handle:streamInfo():dynamicMetadata()
+  local cookies = metadata:get("envoy.filters.http.lua")["cookies"]
+
+  for _, cookie in pairs(cookies) do
+    local loweredCookie = cookie:lower()
+    local modifiedCookie = cookie
+
+    if string.find(loweredCookie, "samesite") then
+      modifiedCookie = string.gsub(cookie, "SameSite=Lax", "SameSite=None")
+    else
+      strings = {modifiedCookie, "; SameSite=None; Secure"}
+      modifiedCookie = concatStrings(strings)
+    end
+
+    if not string.find(modifiedCookie, "Secure") then
+      strings = {modifiedCookie, "; Secure"}
+      modifiedCookie = concatStrings(strings)
+    end
+
+    -- response_handle:headers():add("set-cookie", modifiedCookie)
+    response_handle:headers():add("set-cookie", cookie)
   end
 end
  `
