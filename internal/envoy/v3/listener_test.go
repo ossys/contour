@@ -53,6 +53,7 @@ func TestProtoNamesForVersions(t *testing.T) {
 	assert.Equal(t, ProtoNamesForVersions(HTTPVersion3), []string(nil))
 	assert.Equal(t, ProtoNamesForVersions(HTTPVersion1, HTTPVersion2), []string{"h2", "http/1.1"})
 }
+
 func TestListener(t *testing.T) {
 	tests := map[string]struct {
 		name, address string
@@ -268,6 +269,39 @@ func TestDownstreamTLSContext(t *testing.T) {
 		SubjectName: subjectName,
 	}
 
+	peerValidationContextSkipClientCertValidation := &dag.PeerValidationContext{
+		SkipClientCertValidation: true,
+	}
+	validationContextSkipVerify := &envoy_tls_v3.CommonTlsContext_ValidationContext{
+		ValidationContext: &envoy_tls_v3.CertificateValidationContext{
+			TrustChainVerification: envoy_tls_v3.CertificateValidationContext_ACCEPT_UNTRUSTED,
+		},
+	}
+	peerValidationContextSkipClientCertValidationWithCA := &dag.PeerValidationContext{
+		CACertificate: &dag.Secret{
+			Object: &v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "secret",
+					Namespace: "default",
+				},
+				Data: map[string][]byte{
+					dag.CACertificateKey: ca,
+				},
+			},
+		},
+		SkipClientCertValidation: true,
+	}
+	validationContextSkipVerifyWithCA := &envoy_tls_v3.CommonTlsContext_ValidationContext{
+		ValidationContext: &envoy_tls_v3.CertificateValidationContext{
+			TrustChainVerification: envoy_tls_v3.CertificateValidationContext_ACCEPT_UNTRUSTED,
+			TrustedCa: &envoy_core_v3.DataSource{
+				Specifier: &envoy_core_v3.DataSource_InlineBytes{
+					InlineBytes: ca,
+				},
+			},
+		},
+	}
+
 	tests := map[string]struct {
 		got  *envoy_tls_v3.DownstreamTlsContext
 		want *envoy_tls_v3.DownstreamTlsContext
@@ -302,6 +336,30 @@ func TestDownstreamTLSContext(t *testing.T) {
 					TlsCertificateSdsSecretConfigs: tlsCertificateSdsSecretConfigs,
 					AlpnProtocols:                  alpnProtocols,
 					ValidationContextType:          validationContext,
+				},
+				RequireClientCertificate: protobuf.Bool(true),
+			},
+		},
+		"skip client cert validation": {
+			DownstreamTLSContext(serverSecret, envoy_tls_v3.TlsParameters_TLSv1_2, cipherSuites, peerValidationContextSkipClientCertValidation, "h2", "http/1.1"),
+			&envoy_tls_v3.DownstreamTlsContext{
+				CommonTlsContext: &envoy_tls_v3.CommonTlsContext{
+					TlsParams:                      tlsParams,
+					TlsCertificateSdsSecretConfigs: tlsCertificateSdsSecretConfigs,
+					AlpnProtocols:                  alpnProtocols,
+					ValidationContextType:          validationContextSkipVerify,
+				},
+				RequireClientCertificate: protobuf.Bool(true),
+			},
+		},
+		"skip client cert validation with ca": {
+			DownstreamTLSContext(serverSecret, envoy_tls_v3.TlsParameters_TLSv1_2, cipherSuites, peerValidationContextSkipClientCertValidationWithCA, "h2", "http/1.1"),
+			&envoy_tls_v3.DownstreamTlsContext{
+				CommonTlsContext: &envoy_tls_v3.CommonTlsContext{
+					TlsParams:                      tlsParams,
+					TlsCertificateSdsSecretConfigs: tlsCertificateSdsSecretConfigs,
+					AlpnProtocols:                  alpnProtocols,
+					ValidationContextType:          validationContextSkipVerifyWithCA,
 				},
 				RequireClientCertificate: protobuf.Bool(true),
 			},
@@ -1363,6 +1421,40 @@ func TestTCPProxy(t *testing.T) {
 	for name, tc := range tests {
 		t.Run(name, func(t *testing.T) {
 			got := TCPProxy(statPrefix, tc.proxy, FileAccessLogEnvoy(accessLogPath))
+			protobuf.ExpectEqual(t, tc.want, got)
+		})
+	}
+}
+
+func TestFilterChainTLS_Match(t *testing.T) {
+
+	tests := map[string]struct {
+		domain     string
+		downstream *envoy_tls_v3.DownstreamTlsContext
+		filters    []*envoy_listener_v3.Filter
+		want       *envoy_listener_v3.FilterChain
+	}{
+		"SNI": {
+			domain: "projectcontour.io",
+			want: &envoy_listener_v3.FilterChain{
+				FilterChainMatch: &envoy_listener_v3.FilterChainMatch{
+					ServerNames: []string{"projectcontour.io"},
+				},
+			},
+		},
+		"No SNI": {
+			domain: "*",
+			want: &envoy_listener_v3.FilterChain{
+				FilterChainMatch: &envoy_listener_v3.FilterChainMatch{
+					TransportProtocol: "tls",
+				},
+			},
+		},
+	}
+
+	for name, tc := range tests {
+		t.Run(name, func(t *testing.T) {
+			got := FilterChainTLS(tc.domain, tc.downstream, tc.filters)
 			protobuf.ExpectEqual(t, tc.want, got)
 		})
 	}

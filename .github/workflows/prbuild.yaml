@@ -6,8 +6,27 @@ on: [push, pull_request]
 env:
   GOPROXY: https://proxy.golang.org/
 jobs:
+  build-image:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v1
+      with:
+        version: latest
+    - name: Build image
+      env:
+        TAG_LATEST: "false"
+      run: |
+        make multiarch-build
+    - name: Upload image
+      uses: actions/upload-artifact@v2
+      with:
+        name: image
+        path: image/contour-*.tar
   e2e:
     runs-on: ubuntu-latest
+    needs: [build-image]
     strategy:
       matrix:
         # use stable kubernetes_version values since they're included
@@ -18,15 +37,29 @@ jobs:
         # include defines an additional variable (the specific node
         # image to use) for each kubernetes_version value.
         include:
-            # TODO: Move to upstream image once available (#3610).
           - kubernetes_version: "kubernetes:latest"
-            node_image: "stevesloka/kind-node:v1.21.0"
+            node_image: "docker.io/kindest/node:v1.21.1"
           - kubernetes_version: "kubernetes:n-1"
             node_image: "docker.io/kindest/node:v1.20.2"
           - kubernetes_version: "kubernetes:n-2"
             node_image: "docker.io/kindest/node:v1.19.7"
     steps:
       - uses: actions/checkout@v2
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: image
+          path: image
+      - uses: actions/cache@v2
+        with:
+          # * Module download cache
+          # * Build cache (Linux)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-go-
       - name: add deps to path
         run: |
           ./hack/actions/install-kubernetes-toolchain.sh $GITHUB_WORKSPACE/bin
@@ -34,10 +67,12 @@ jobs:
       - name: e2e tests
         env:
           NODEIMAGE: ${{ matrix.node_image }}
+          LOAD_PREBUILT_IMAGE: "true"
         run: |
           make e2e
   integration:
     runs-on: ubuntu-latest
+    needs: [build-image]
     strategy:
       matrix:
         # use stable kubernetes_version values since they're included
@@ -48,15 +83,19 @@ jobs:
         # include defines an additional variable (the specific node
         # image to use) for each kubernetes_version value.
         include:
-            # TODO: Move to upstream image once available (#3610).
           - kubernetes_version: "kubernetes:latest"
-            node_image: "stevesloka/kind-node:v1.21.0"
+            node_image: "docker.io/kindest/node:v1.21.1"
           - kubernetes_version: "kubernetes:n-1"
             node_image: "docker.io/kindest/node:v1.20.2"
           - kubernetes_version: "kubernetes:n-2"
             node_image: "docker.io/kindest/node:v1.19.7"
     steps:
       - uses: actions/checkout@v2
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: image
+          path: image
       - name: add deps to path
         run: |
           ./hack/actions/install-kubernetes-toolchain.sh $GITHUB_WORKSPACE/bin
@@ -64,8 +103,60 @@ jobs:
       - name: integration tests
         env:
           NODEIMAGE: ${{ matrix.node_image }}
+          LOAD_PREBUILT_IMAGE: "true"
         run: |
           make integration
+  upgrade:
+    runs-on: ubuntu-latest
+    needs: [build-image]
+    strategy:
+      matrix:
+        # use stable kubernetes_version values since they're included
+        # in the name of the GitHub Actions job, and we don't want to
+        # have to update branch protection rules every time we change
+        # a Kubernetes version number.
+        kubernetes_version: ["kubernetes:latest", "kubernetes:n-1", "kubernetes:n-2"]
+        # include defines an additional variable (the specific node
+        # image to use) for each kubernetes_version value.
+        include:
+          - kubernetes_version: "kubernetes:latest"
+            node_image: "docker.io/kindest/node:v1.21.1"
+          - kubernetes_version: "kubernetes:n-1"
+            node_image: "docker.io/kindest/node:v1.20.2"
+          - kubernetes_version: "kubernetes:n-2"
+            node_image: "docker.io/kindest/node:v1.19.7"
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          # Fetch history for all tags and branches so we can figure out most
+          # recent release tag.
+          fetch-depth: 0
+      - name: Download image
+        uses: actions/download-artifact@v2
+        with:
+          name: image
+          path: image
+      - uses: actions/cache@v2
+        with:
+          # * Module download cache
+          # * Build cache (Linux)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-go-
+      - name: add deps to path
+        run: |
+          ./hack/actions/install-kubernetes-toolchain.sh $GITHUB_WORKSPACE/bin
+          echo "$GITHUB_WORKSPACE/bin" >> $GITHUB_PATH
+      - name: upgrade tests
+        env:
+          NODEIMAGE: ${{ matrix.node_image }}
+          LOAD_PREBUILT_IMAGE: "true"
+        run: |
+          export CONTOUR_UPGRADE_TO_IMAGE="projectcontour/contour:$(ls ./image/contour-*.tar | sed -E 's/.*-(.*).tar/\1/')"
+          make upgrade
   # TODO: re-enable once Ingress v1 support is complete
   # ingress-conformance:
   #   runs-on: ubuntu-latest
@@ -82,9 +173,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          # * Module download cache
+          # * Build cache (Linux)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-go-
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.16.2'
+          go-version: '1.16.4'
       - name: test
         run: |
           make install
@@ -97,9 +198,19 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          # * Module download cache
+          # * Build cache (Windows)
+          path: |
+            ~/go/pkg/mod
+            ~/Library/Caches/go-build
+          key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-go-
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.16.2'
+          go-version: '1.16.4'
       - name: test
         run: |
           make install
@@ -122,7 +233,7 @@ jobs:
       - name: Codespell
         uses: codespell-project/actions-codespell@master
         with:
-          skip: .git,*.png,*.woff,*.ttf,*.jpg,*.ico,./site/Gemfile.lock,./site/_config.yml
+          skip: .git,*.png,*.woff,*.woff2,*.eot,*.ttf,*.jpg,*.ico,*.svg,./site/themes/contour/static/fonts/README.md
           ignore_words_file: './.codespell.ignorewords'
           check_filenames: true
           check_hidden: true
@@ -130,9 +241,19 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
+      - uses: actions/cache@v2
+        with:
+          # * Module download cache
+          # * Build cache (Linux)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+          key: ${{ runner.os }}-${{ github.job }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ github.job }}-go-
       - uses: actions/setup-go@v2
         with:
-          go-version: '1.16.2'
+          go-version: '1.16.4'
       - name: generate
         run: |
           make generate lint-yamllint lint-flags

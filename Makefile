@@ -7,13 +7,11 @@ SRCDIRS := ./cmd ./internal ./apis
 LOCAL_BOOTSTRAP_CONFIG = localenvoyconfig.yaml
 SECURE_LOCAL_BOOTSTRAP_CONFIG = securelocalenvoyconfig.yaml
 PHONY = gencerts
-ENVOY_IMAGE = docker.io/envoyproxy/envoy:v1.18.2
+ENVOY_IMAGE = docker.io/envoyproxy/envoy:v1.18.3
 
-# The version of Jekyll is pinned in site/Gemfile.lock.
-# https://docs.netlify.com/configure-builds/common-configurations/#jekyll
-JEKYLL_IMAGE := jekyll/jekyll:4
-JEKYLL_PORT := 4000
-JEKYLL_LIVERELOAD_PORT := 35729
+# Variables needed for running upgrade tests.
+CONTOUR_UPGRADE_FROM_VERSION ?= $(shell git describe --tags `git rev-list --tags --max-count=1`)
+CONTOUR_UPGRADE_TO_IMAGE ?= projectcontour/contour:main
 
 TAG_LATEST ?= false
 
@@ -26,11 +24,16 @@ else
 		--tag $(IMAGE):$(VERSION)
 endif
 
+IMAGE_RESULT_FLAG = --output=type=oci,dest=$(shell pwd)/image/contour-$(VERSION).tar
+ifeq ($(PUSH_IMAGE), true)
+	IMAGE_RESULT_FLAG = --push
+endif
+
 # Platforms to build the multi-arch image for.
 IMAGE_PLATFORMS ?= linux/amd64,linux/arm64
 
 # Base build image to use.
-BUILD_BASE_IMAGE ?= golang:1.16.2
+BUILD_BASE_IMAGE ?= golang:1.16.4
 
 # Enable build with CGO.
 BUILD_CGO_ENABLED ?= 0
@@ -102,8 +105,9 @@ race:
 download: ## Download Go modules
 	go mod download
 
-multiarch-build-push: ## Build and push a multi-arch Contour container image to the Docker registry
-	docker buildx build \
+multiarch-build: ## Build and optionally push a multi-arch Contour container image to the Docker registry
+	@mkdir -p $(shell pwd)/image
+	docker buildx build $(IMAGE_RESULT_FLAG) \
 		--platform $(IMAGE_PLATFORMS) \
 		--build-arg "BUILD_BASE_IMAGE=$(BUILD_BASE_IMAGE)" \
 		--build-arg "BUILD_VERSION=$(BUILD_VERSION)" \
@@ -113,7 +117,6 @@ multiarch-build-push: ## Build and push a multi-arch Contour container image to 
 		--build-arg "BUILD_EXTRA_GO_LDFLAGS=$(BUILD_EXTRA_GO_LDFLAGS)" \
 		$(DOCKER_BUILD_LABELS) \
 		$(IMAGE_TAGS) \
-		--push \
 		$(shell pwd)
 
 container: ## Build the Contour container image
@@ -173,7 +176,7 @@ lint-golint:
 .PHONY: check-yamllint
 lint-yamllint:
 	@echo Running YAML linter ...
-	@./hack/yamllint examples/ site/examples/
+	@./hack/yamllint examples/ site/content/examples/
 
 # Check that CLI flags are formatted consistently. We are checking
 # for calls to Kingping Flags() and Command() APIs where the 2nd
@@ -223,7 +226,7 @@ generate-api-docs:
 .PHONY: generate-metrics-docs
 generate-metrics-docs:
 	@echo Generating metrics documentation ...
-	@cd site/_metrics && rm -f *.md && go run ../../hack/generate-metrics-doc.go
+	@cd site/content/guides/metrics && rm -f *.md && go run ../../../../hack/generate-metrics-doc.go
 
 .PHONY: check-generate
 check-generate: generate
@@ -293,7 +296,7 @@ certs/contourcert.pem: certs/CAkey.pem certs/contourkey.pem
 		-CAcreateserial \
 		-out certs/contourcert.pem \
 		-days 1825 -sha256 \
-		-extfile _integration/cert-contour.ext
+		-extfile certs/cert-contour.ext
 
 certs/envoykey.pem:
 	@echo Generating new Envoy key
@@ -310,7 +313,7 @@ certs/envoycert.pem: certs/CAkey.pem certs/envoykey.pem
 		-CAcreateserial \
 		-out certs/envoycert.pem \
 		-days 1825 -sha256 \
-		-extfile _integration/cert-envoy.ext
+		-extfile certs/cert-envoy.ext
 
 generate-uml: $(patsubst %.uml,%.png,$(wildcard site/img/uml/*.uml))
 
@@ -321,29 +324,38 @@ generate-uml: $(patsubst %.uml,%.png,$(wildcard site/img/uml/*.uml))
 	cd `dirname $@` && plantuml `basename "$^"`
 
 .PHONY: site-devel
-site-devel: ## Launch the website in a Docker container
-	docker run --rm -p $(JEKYLL_PORT):$(JEKYLL_PORT) -p $(JEKYLL_LIVERELOAD_PORT):$(JEKYLL_LIVERELOAD_PORT) -v $$(pwd)/site:/site -it $(JEKYLL_IMAGE) \
-		bash -c "cd /site && bundle install --path bundler/cache && bundle exec jekyll serve --host 0.0.0.0 --port $(JEKYLL_PORT) --livereload_port $(JEKYLL_LIVERELOAD_PORT) --livereload --force_polling --incremental"
+site-devel: ## Launch the website
+	cd site && hugo serve
 
 .PHONY: site-check
 site-check: ## Test the site's links
-	docker run --rm -v $$(pwd):/src -it $(JEKYLL_IMAGE) bash -c "cd /src && ./hack/site-proofing/cibuild"
+	# TODO: Clean up to use htmltest
 
 check-integration:
 	@integration-tester --version > /dev/null 2>&1 || (echo "ERROR: To run the integration tests, you will need to install integration-tester (https://github.com/projectcontour/integration-tester)"; exit 1)
 
-.PHONY: integration ## Run integration tests against a real k8s cluster
-integration: check-integration
+.PHONY: integration
+integration: check-integration ## Run integration tests against a real k8s cluster
 	./_integration/testsuite/make-kind-cluster.sh
 	./_integration/testsuite/install-contour-working.sh
 	./_integration/testsuite/run-test-case.sh ./_integration/testsuite/ingress/*.yaml ./_integration/testsuite/httpproxy/*.yaml ./_integration/testsuite/gatewayapi/*.yaml
 	./_integration/testsuite/cleanup.sh
 
 .PHONY: e2e
-e2e:
+e2e: ## Run integration tests against a real k8s cluster
 	./_integration/testsuite/make-kind-cluster.sh
 	./_integration/testsuite/install-contour-working.sh
-	go test -v -tags e2e -p 1 -timeout 20m ./test/e2e/...
+	ginkgo -tags=e2e -mod=readonly -skipPackage=upgrade -keepGoing -randomizeSuites -randomizeAllSpecs -slowSpecThreshold=15 -r -v ./test/e2e
+	./_integration/testsuite/cleanup.sh
+
+.PHONY: upgrade
+upgrade: ## Run upgrade tests against a real k8s cluster
+	./_integration/testsuite/make-kind-cluster.sh
+	./_integration/testsuite/install-contour-release.sh $(CONTOUR_UPGRADE_FROM_VERSION)
+	./hack/actions/kind-load-contour-image.sh
+	CONTOUR_UPGRADE_FROM_VERSION=$(CONTOUR_UPGRADE_FROM_VERSION) \
+		CONTOUR_UPGRADE_TO_IMAGE=$(CONTOUR_UPGRADE_TO_IMAGE) \
+		ginkgo -tags=e2e -mod=readonly -randomizeAllSpecs -slowSpecThreshold=300 -v ./test/e2e/upgrade
 	./_integration/testsuite/cleanup.sh
 
 check-ingress-conformance: ## Run Ingress controller conformance

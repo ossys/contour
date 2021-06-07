@@ -24,13 +24,12 @@ import (
 	"time"
 
 	certmanagerv1 "github.com/jetstack/cert-manager/pkg/apis/certmanager/v1"
-	certmanagermetav1 "github.com/jetstack/cert-manager/pkg/apis/meta/v1"
 	"github.com/onsi/ginkgo"
 	contourv1 "github.com/projectcontour/contour/apis/projectcontour/v1"
 	contourv1alpha1 "github.com/projectcontour/contour/apis/projectcontour/v1alpha1"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apiextensions_v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -63,6 +62,10 @@ type Framework struct {
 	// HTTP provides helpers for making HTTP/HTTPS requests.
 	HTTP *HTTP
 
+	// Certs provides helpers for creating cert-manager certificates
+	// and related resources.
+	Certs *Certs
+
 	t ginkgo.GinkgoTInterface
 }
 
@@ -73,8 +76,10 @@ func NewFramework(t ginkgo.GinkgoTInterface) *Framework {
 	require.NoError(t, contourv1alpha1.AddToScheme(scheme))
 	require.NoError(t, gatewayv1alpha1.AddToScheme(scheme))
 	require.NoError(t, certmanagerv1.AddToScheme(scheme))
+	require.NoError(t, apiextensions_v1.AddToScheme(scheme))
 
-	config := config.GetConfigOrDie()
+	config, err := config.GetConfig()
+	require.NoError(t, err)
 
 	configQPS := os.Getenv("K8S_CLIENT_QPS")
 	if configQPS == "" {
@@ -117,6 +122,10 @@ func NewFramework(t ginkgo.GinkgoTInterface) *Framework {
 				client: crClient,
 				t:      t,
 			},
+			EchoSecure: &EchoSecure{
+				client: crClient,
+				t:      t,
+			},
 			HTTPBin: &HTTPBin{
 				client: crClient,
 				t:      t,
@@ -127,6 +136,12 @@ func NewFramework(t ginkgo.GinkgoTInterface) *Framework {
 			HTTPSURLBase:  httpsURLBase,
 			RetryInterval: time.Second,
 			RetryTimeout:  60 * time.Second,
+			t:             t,
+		},
+		Certs: &Certs{
+			client:        crClient,
+			retryInterval: time.Second,
+			retryTimeout:  60 * time.Second,
 			t:             t,
 		},
 		t: t,
@@ -187,6 +202,30 @@ func (f *Framework) CreateHTTPRouteAndWaitFor(route *gatewayv1alpha1.HTTPRoute, 
 	return res, true
 }
 
+// CreateTLSRouteAndWaitFor creates the provided TLSRoute in the Kubernetes API
+// and then waits for the specified condition to be true.
+func (f *Framework) CreateTLSRouteAndWaitFor(route *gatewayv1alpha1.TLSRoute, condition func(*gatewayv1alpha1.TLSRoute) bool) (*gatewayv1alpha1.TLSRoute, bool) {
+	require.NoError(f.t, f.Client.Create(context.TODO(), route))
+
+	res := &gatewayv1alpha1.TLSRoute{}
+
+	if err := wait.PollImmediate(f.RetryInterval, f.RetryTimeout, func() (bool, error) {
+		if err := f.Client.Get(context.TODO(), client.ObjectKeyFromObject(route), res); err != nil {
+			// if there was an error, we want to keep
+			// retrying, so just return false, not an
+			// error.
+			return false, nil
+		}
+
+		return condition(res), nil
+	}); err != nil {
+		// return the last response for logging/debugging purposes
+		return res, false
+	}
+
+	return res, true
+}
+
 // CreateNamespace creates a namespace with the given name in the
 // Kubernetes API or fails the test if it encounters an error.
 func (f *Framework) CreateNamespace(name string) {
@@ -208,46 +247,6 @@ func (f *Framework) DeleteNamespace(name string) {
 		},
 	}
 	require.NoError(f.t, f.Client.Delete(context.TODO(), ns))
-}
-
-// CreateSelfSignedCert creates a self-signed Issuer if it doesn't already exist
-// and uses it to create a self-signed Certificate. It returns a cleanup function.
-func (f *Framework) CreateSelfSignedCert(ns, name, secretName, dnsName string) func() {
-	issuer := &certmanagerv1.Issuer{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      "selfsigned",
-		},
-		Spec: certmanagerv1.IssuerSpec{
-			IssuerConfig: certmanagerv1.IssuerConfig{
-				SelfSigned: &certmanagerv1.SelfSignedIssuer{},
-			},
-		},
-	}
-
-	if err := f.Client.Create(context.TODO(), issuer); err != nil && !errors.IsAlreadyExists(err) {
-		require.FailNow(f.t, "error creating Issuer: %v", err)
-	}
-
-	cert := &certmanagerv1.Certificate{
-		ObjectMeta: metav1.ObjectMeta{
-			Namespace: ns,
-			Name:      name,
-		},
-		Spec: certmanagerv1.CertificateSpec{
-			DNSNames:   []string{dnsName},
-			SecretName: secretName,
-			IssuerRef: certmanagermetav1.ObjectReference{
-				Name: "selfsigned",
-			},
-		},
-	}
-	require.NoError(f.t, f.Client.Create(context.TODO(), cert))
-
-	return func() {
-		require.NoError(f.t, f.Client.Delete(context.TODO(), cert))
-		require.NoError(f.t, f.Client.Delete(context.TODO(), issuer))
-	}
 }
 
 // GetEchoResponseBody decodes an HTTP response body that is

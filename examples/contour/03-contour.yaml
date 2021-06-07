@@ -45,7 +45,7 @@ spec:
         - --contour-key-file=/certs/tls.key
         - --config-path=/config/contour.yaml
         command: ["contour"]
-        image: docker.io/ossys/contour:1.15.0
+        image: docker.io/projectcontour/contour:v1.16.0
         imagePullPolicy: Always
         name: contour
         ports:
@@ -85,8 +85,6 @@ spec:
             fieldRef:
               apiVersion: v1
               fieldPath: metadata.name
-      imagePullSecrets:
-        - name: regcred
       dnsPolicy: ClusterFirst
       serviceAccountName: contour
       securityContext:

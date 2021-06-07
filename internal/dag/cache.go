@@ -26,7 +26,6 @@ import (
 	"github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	networking_v1 "k8s.io/api/networking/v1"
-	"k8s.io/api/networking/v1beta1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -60,6 +59,7 @@ type KubernetesCache struct {
 	tlscertificatedelegations map[types.NamespacedName]*contour_api_v1.TLSCertificateDelegation
 	services                  map[types.NamespacedName]*v1.Service
 	namespaces                map[string]*v1.Namespace
+	gatewayclass              *gatewayapi_v1alpha1.GatewayClass
 	gateway                   *gatewayapi_v1alpha1.Gateway
 	httproutes                map[types.NamespacedName]*gatewayapi_v1alpha1.HTTPRoute
 	tlsroutes                 map[types.NamespacedName]*gatewayapi_v1alpha1.TLSRoute
@@ -207,14 +207,6 @@ func (kc *KubernetesCache) Insert(obj interface{}) bool {
 	case *v1.Namespace:
 		kc.namespaces[obj.Name] = obj
 		return true
-	case *v1beta1.Ingress:
-		// Convert the v1beta1 object to v1 before adding to the
-		// local ingress cache for easier processing later on.
-		objV1 := toV1Ingress(obj)
-		if kc.ingressMatchesIngressClass(objV1) {
-			kc.ingresses[k8s.NamespacedNameOf(objV1)] = objV1
-			return true
-		}
 	case *networking_v1.Ingress:
 		if kc.ingressMatchesIngressClass(obj) {
 			kc.ingresses[k8s.NamespacedNameOf(obj)] = obj
@@ -233,6 +225,9 @@ func (kc *KubernetesCache) Insert(obj interface{}) bool {
 	case *contour_api_v1.TLSCertificateDelegation:
 		kc.tlscertificatedelegations[k8s.NamespacedNameOf(obj)] = obj
 		return true
+	case *gatewayapi_v1alpha1.GatewayClass:
+		kc.gatewayclass = obj
+		return true
 	case *gatewayapi_v1alpha1.Gateway:
 		if kc.matchesGateway(obj) {
 			kc.gateway = obj
@@ -248,10 +243,6 @@ func (kc *KubernetesCache) Insert(obj interface{}) bool {
 		kc.udproutes[k8s.NamespacedNameOf(obj)] = obj
 		return true
 	case *gatewayapi_v1alpha1.TLSRoute:
-		m := k8s.NamespacedNameOf(obj)
-		// TODO(youngnick): Remove this once gateway-api actually have behavior
-		// other than being added to the cache.
-		kc.WithField("experimental", "gateway-api").WithField("name", m.Name).WithField("namespace", m.Namespace).Debug("Adding TLSRoute")
 		kc.tlsroutes[k8s.NamespacedNameOf(obj)] = obj
 		return true
 	case *gatewayapi_v1alpha1.BackendPolicy:
@@ -272,103 +263,6 @@ func (kc *KubernetesCache) Insert(obj interface{}) bool {
 	}
 
 	return false
-}
-
-func toV1Ingress(obj *v1beta1.Ingress) *networking_v1.Ingress {
-
-	if obj == nil {
-		return nil
-	}
-
-	var convertedTLS []networking_v1.IngressTLS
-	var convertedIngressRules []networking_v1.IngressRule
-	var convertedDefaultBackend *networking_v1.IngressBackend
-
-	for _, tls := range obj.Spec.TLS {
-		convertedTLS = append(convertedTLS, networking_v1.IngressTLS{
-			Hosts:      tls.Hosts,
-			SecretName: tls.SecretName,
-		})
-	}
-
-	for _, r := range obj.Spec.Rules {
-
-		rule := networking_v1.IngressRule{}
-
-		if r.Host != "" {
-			rule.Host = r.Host
-		}
-
-		if r.HTTP != nil {
-			var paths []networking_v1.HTTPIngressPath
-
-			for _, p := range r.HTTP.Paths {
-				// Default to implementation specific path type if not set.
-				// In practice this is mostly to ensure tests do not panic as a
-				// a real resource cannot be created without a path type set.
-				pathType := networking_v1.PathTypeImplementationSpecific
-				if p.PathType != nil {
-					switch *p.PathType {
-					case v1beta1.PathTypePrefix:
-						pathType = networking_v1.PathTypePrefix
-					case v1beta1.PathTypeExact:
-						pathType = networking_v1.PathTypeExact
-					case v1beta1.PathTypeImplementationSpecific:
-						pathType = networking_v1.PathTypeImplementationSpecific
-					}
-				}
-
-				paths = append(paths, networking_v1.HTTPIngressPath{
-					Path:     p.Path,
-					PathType: &pathType,
-					Backend: networking_v1.IngressBackend{
-						Service: &networking_v1.IngressServiceBackend{
-							Name: p.Backend.ServiceName,
-							Port: serviceBackendPort(p.Backend.ServicePort),
-						},
-					},
-				})
-			}
-
-			rule.IngressRuleValue = networking_v1.IngressRuleValue{
-				HTTP: &networking_v1.HTTPIngressRuleValue{
-					Paths: paths,
-				},
-			}
-		}
-
-		convertedIngressRules = append(convertedIngressRules, rule)
-	}
-
-	if obj.Spec.Backend != nil {
-		convertedDefaultBackend = &networking_v1.IngressBackend{
-			Service: &networking_v1.IngressServiceBackend{
-				Name: obj.Spec.Backend.ServiceName,
-				Port: serviceBackendPort(obj.Spec.Backend.ServicePort),
-			},
-		}
-	}
-
-	return &networking_v1.Ingress{
-		ObjectMeta: obj.ObjectMeta,
-		Spec: networking_v1.IngressSpec{
-			IngressClassName: obj.Spec.IngressClassName,
-			DefaultBackend:   convertedDefaultBackend,
-			TLS:              convertedTLS,
-			Rules:            convertedIngressRules,
-		},
-	}
-}
-
-func serviceBackendPort(port intstr.IntOrString) networking_v1.ServiceBackendPort {
-	if port.Type == intstr.String {
-		return networking_v1.ServiceBackendPort{
-			Name: port.StrVal,
-		}
-	}
-	return networking_v1.ServiceBackendPort{
-		Number: port.IntVal,
-	}
 }
 
 // Remove removes obj from the KubernetesCache.
@@ -400,11 +294,6 @@ func (kc *KubernetesCache) remove(obj interface{}) bool {
 		_, ok := kc.namespaces[obj.Name]
 		delete(kc.namespaces, obj.Name)
 		return ok
-	case *v1beta1.Ingress:
-		m := k8s.NamespacedNameOf(obj)
-		_, ok := kc.ingresses[m]
-		delete(kc.ingresses, m)
-		return ok
 	case *networking_v1.Ingress:
 		m := k8s.NamespacedNameOf(obj)
 		_, ok := kc.ingresses[m]
@@ -426,6 +315,9 @@ func (kc *KubernetesCache) remove(obj interface{}) bool {
 		_, ok := kc.tlscertificatedelegations[m]
 		delete(kc.tlscertificatedelegations, m)
 		return ok
+	case *gatewayapi_v1alpha1.GatewayClass:
+		kc.gatewayclass = nil
+		return true
 	case *gatewayapi_v1alpha1.Gateway:
 		if kc.matchesGateway(obj) {
 			kc.gateway = nil
@@ -450,9 +342,6 @@ func (kc *KubernetesCache) remove(obj interface{}) bool {
 	case *gatewayapi_v1alpha1.TLSRoute:
 		m := k8s.NamespacedNameOf(obj)
 		_, ok := kc.tlsroutes[m]
-		// TODO(youngnick): Remove this once gateway-api actually have behavior
-		// other than being removed from the cache.
-		kc.WithField("experimental", "gateway-api").WithField("name", m.Name).WithField("namespace", m.Namespace).Debug("Removing TLSRoute")
 		delete(kc.tlsroutes, m)
 		return ok
 	case *gatewayapi_v1alpha1.BackendPolicy:

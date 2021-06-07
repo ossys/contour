@@ -18,28 +18,18 @@ This section describes how to build Contour from source.
 1. *Install Go*
 
     Contour requires [Go 1.16][1] or later.
-    We also assume that you're familiar with Go's [`GOPATH` workspace][3] convention, and have the appropriate environment variables set.
 
 ### Fetch the source
 
 Contour uses [`go modules`][2] for dependency management.
 
-```
-go get github.com/projectcontour/contour
-```
+1. [Fork][3] the repo
 
-Go is very particular when it comes to the location of the source code in your `$GOPATH`.
-The easiest way to make the `go` tool happy is to rename Contour's remote location to something else, and substitute your fork for `origin`.
-For example, to set `origin` to your fork, run this command substituting your GitHub username where appropriate.
+2. Create a local clone
 
 ```
-git remote rename origin upstream
-git remote add origin git@github.com:davecheney/contour.git
+git clone git@github.com:YOUR-USERNAME/contour.git
 ```
-
-This ensures that the source code on disk remains at `$GOPATH/src/github.com/projectcontour/contour` while the remote repository is configured for your fork.
-
-The remainder of this document assumes your terminal's working directory is `$GOPATH/src/github.com/projectcontour/contour`.
 
 ### Building
 
@@ -59,8 +49,6 @@ Once you have Contour building, you can run all the unit tests for the project:
 ```
 make check
 ```
-
-This assumes your working directory is set to `$GOPATH/src/github.com/projectcontour/contour`. 
 
 To run the tests for a single package, change to package directory and run:
 
@@ -255,7 +243,7 @@ This section provides some useful information and guidelines for working with Co
 #### Test Categories
 * **Unit Test**: A Go test for a particular function/package. In some cases, these test more than one package at a time.
 * **Feature Test**: A Go test in `internal/featuretests` that tests the translation of Kubernetes config to Envoy config, using a Contour event handler and xDS server. 
-* **Integration Test**: A YAML/rego test in `_integration/testsuite` that performs a full end-to-end test of Contour running in a cluster. Typically verifies the behavior of HTTP requests given a Kubernetes config (currently `HTTPProxy` and Gateway API configs have test cases).
+* **End-To-End (E2E) Test**: A Go test in `test/e2e` that performs a full end-to-end test of Contour running in a cluster. Typically verifies the behavior of HTTP requests given a Kubernetes `HTTPProxy`, `Ingress` or Gateway API config.
 
 ### Summary of Major Test Suites
 
@@ -269,8 +257,10 @@ In general, changes to the core processing pipeline should be accompanied by new
 | `internal/envoy/v3/*_test.go` | Tests conversion of DAG objects to Envoy config. |
 | `internal/xdscache/v3/*_test.go` (specifically the `Test[Cluster\|Listener\|Route\|Secret]Visit` functions) | Tests conversion of Kubernetes config to Envoy config. |
 | `internal/featuretests/v3/*_test.go` | Tests conversion of Kubernetes config to Envoy config, using a ~full Contour event handler and xDS server. |
-| `_integration/testsuite/[httpproxy\|gatewayapi]` | E2E tests with Contour running in a cluster. Verifies behavior of HTTP requests for configured proxies. |
+| `test/e2e/[httpproxy\|gateway\|ingress]` | E2E tests with Contour running in a cluster. Verifies behavior of HTTP requests for configured proxies. |
 
+
+_Note: the tests previously implemented in `_integration` have been migrated to `test/e2e`. The `_integration` directory is no longer accepting changes and will be removed soon. All new end-to-end tests should be implemented in `test/e2e`._
 
 ## DCO Sign off
 
@@ -337,7 +327,7 @@ By making a contribution to this project, I certify that:
 
 [1]: https://golang.org/dl/
 [2]: https://github.com/golang/go/wiki/Modules
-[3]: https://golang.org/doc/code.html
+[3]: https://docs.github.com/en/github/getting-started-with-github/fork-a-repo#fork-an-example-repository 
 [4]: https://golang.org/pkg/testing/
 [5]: https://developercertificate.org/
 [6]: https://github.com/projectcontour/contour/issues/new/choose

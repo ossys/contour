@@ -45,8 +45,9 @@ data:
     #   determine which XDS Server implementation to utilize in Contour.
     #   xds-server-type: contour
     #
-    # Specify the gateway-api Gateway Contour should watch.
+    # Specify the Gateway API configuration.
     # gateway:
+    #   controllerName: projectcontour.io/projectcontour/contour
     #   name: contour
     #   namespace: projectcontour
     #
@@ -2013,7 +2014,9 @@ spec:
                           caSecret:
                             description: Name of a Kubernetes secret that contains
                               a CA certificate bundle. The client certificate must
-                              validate against the certificates in the bundle.
+                              validate against the certificates in the bundle. If
+                              specified and SkipClientCertValidation is true, client
+                              certificates will be required on requests.
                             minLength: 1
                             type: string
                           skipClientCertValidation:
@@ -2023,9 +2026,10 @@ spec:
                               authorization in order to enable the external authorization
                               server to validate client certificates. When this field
                               is set to true, client certificates are requested but
-                              not verified by Envoy. If external authorization is
-                              in use, they are presented to the external authorization
-                              server.
+                              not verified by Envoy. If CACertificate is specified,
+                              client certificates are required on requests, but not
+                              verified. If external authorization is in use, they
+                              are presented to the external authorization server.
                             type: boolean
                         type: object
                       enableFallbackCertificate:
@@ -2686,7 +2690,7 @@ rules:
 apiVersion: batch/v1
 kind: Job
 metadata:
-  name: contour-certgen-v1.15.0
+  name: contour-certgen-v1.16.0
   namespace: projectcontour
 spec:
   ttlSecondsAfterFinished: 0
@@ -2697,7 +2701,7 @@ spec:
     spec:
       containers:
       - name: contour
-        image: docker.io/projectcontour/contour:v1.15.0
+        image: docker.io/projectcontour/contour:v1.16.0
         imagePullPolicy: Always
         command:
         - contour
@@ -2822,6 +2826,7 @@ rules:
   - networking.x-k8s.io
   resources:
   - backendpolicies
+  - gatewayclasses
   - gateways
   - httproutes
   - tcproutes
@@ -2835,6 +2840,7 @@ rules:
   - networking.x-k8s.io
   resources:
   - backendpolicies/status
+  - gatewayclasses/status
   - httproutes/status
   - tcproutes/status
   - tlsroutes/status
@@ -2967,7 +2973,7 @@ spec:
         - --contour-key-file=/certs/tls.key
         - --config-path=/config/contour.yaml
         command: ["contour"]
-        image: docker.io/projectcontour/contour:v1.15.0
+        image: docker.io/projectcontour/contour:v1.16.0
         imagePullPolicy: IfNotPresent
         name: contour
         ports:
@@ -3056,7 +3062,7 @@ spec:
         args:
           - envoy
           - shutdown-manager
-        image: docker.io/projectcontour/contour:v1.15.0
+        image: docker.io/projectcontour/contour:v1.16.0
         imagePullPolicy: IfNotPresent
         lifecycle:
           preStop:
@@ -3080,7 +3086,7 @@ spec:
         - --log-level info
         command:
         - envoy
-        image: docker.io/envoyproxy/envoy:v1.18.2
+        image: docker.io/envoyproxy/envoy:v1.18.3
         imagePullPolicy: IfNotPresent
         name: envoy
         env:
@@ -3135,7 +3141,7 @@ spec:
         - --envoy-key-file=/certs/tls.key
         command:
         - contour
-        image: docker.io/projectcontour/contour:v1.15.0
+        image: docker.io/projectcontour/contour:v1.16.0
         imagePullPolicy: IfNotPresent
         name: envoy-initconfig
         volumeMounts:
